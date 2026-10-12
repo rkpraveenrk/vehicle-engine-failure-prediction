@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.env
+run_output/
+predictive_maintenance/data/processed/
+*.db
