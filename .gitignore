@@ -1,0 +1,27 @@
+# Python temporary files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Notebook temporary files
+.ipynb_checkpoints/
+
+# MLflow local tracking outputs
+mlruns/
+mlflow_tracking.db
+mlflow_tracking.db-*
+
+# Operating system files
+.DS_Store
+
+# Local temporary files
+*.log
