@@ -1,4 +1,4 @@
-"""Streamlit prediction UI loads the model committed by GitHub Actions.check"""
+"""Streamlit prediction UI loads the model committed by GitHub Actions."""
 import json
 from pathlib import Path
 import joblib
