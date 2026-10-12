@@ -37,7 +37,7 @@ jobs:
       - run: pip install -r predictive_maintenance/requirements.txt
       - run: python predictive_maintenance/model_building/prep.py
       - name: Upload train/test splits
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: processed-datasets
           path: predictive_maintenance/data/processed/*.csv
@@ -56,14 +56,14 @@ jobs:
           cache-dependency-path: predictive_maintenance/requirements.txt
       - run: pip install -r predictive_maintenance/requirements.txt
       - name: Download processed data from previous job
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: processed-datasets
           path: predictive_maintenance/data/processed
       - name: Train tune and evaluate model
         run: python predictive_maintenance/model_building/train.py --iterations 12
       - name: Upload trained model and reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: model-results
           path: |
@@ -84,7 +84,7 @@ jobs:
         with:
           persist-credentials: true
       - name: Download trained model and configuration
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: model-results
           path: .
