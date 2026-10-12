@@ -1,0 +1,27 @@
+{
+  "threshold": 0.45,
+  "feature_names": [
+    "Engine rpm",
+    "Lub oil pressure",
+    "Fuel pressure",
+    "Coolant pressure",
+    "lub oil temp",
+    "Coolant temp",
+    "delta_temp",
+    "oil_viscosity_proxy",
+    "cooling_eff_index",
+    "oil_temp_squared",
+    "coolant_temp_squared",
+    "thermal_ratio",
+    "fuel_eff_proxy",
+    "lube_stress",
+    "press_balance",
+    "cool_vs_lube_balance",
+    "total_pressure",
+    "rpm_x_oilpress",
+    "temp_x_fuelpress",
+    "rpm_x_temp",
+    "oilpress_x_fuelpress"
+  ],
+  "positive_class": 1
+}
