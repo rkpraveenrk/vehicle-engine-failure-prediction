@@ -1,0 +1,101 @@
+name: Vehicle Engine Failure Prediction CI/CD
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'predictive_maintenance/model_building/**'
+      - 'predictive_maintenance/hosting/**'
+      - 'predictive_maintenance/data/engine_data.csv'
+      - 'predictive_maintenance/requirements.txt'
+      - '.github/workflows/pipeline.yml'
+permissions:
+  contents: read
+jobs:
+  register-dataset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: predictive_maintenance/requirements.txt
+      - run: pip install -r predictive_maintenance/requirements.txt
+      - run: python predictive_maintenance/model_building/data_register.py
+
+  data-prep:
+    needs: register-dataset
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: predictive_maintenance/requirements.txt
+      - run: pip install -r predictive_maintenance/requirements.txt
+      - run: python predictive_maintenance/model_building/prep.py
+      - name: Upload train/test splits
+        uses: actions/upload-artifact@v4
+        with:
+          name: processed-datasets
+          path: predictive_maintenance/data/processed/*.csv
+          if-no-files-found: error
+          retention-days: 14
+
+  model-training:
+    needs: data-prep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: predictive_maintenance/requirements.txt
+      - run: pip install -r predictive_maintenance/requirements.txt
+      - name: Download processed data from previous job
+        uses: actions/download-artifact@v4
+        with:
+          name: processed-datasets
+          path: predictive_maintenance/data/processed
+      - name: Train tune and evaluate model
+        run: python predictive_maintenance/model_building/train.py --iterations 12
+      - name: Upload trained model and reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-results
+          path: |
+            predictive_maintenance/models/*.joblib
+            predictive_maintenance/models/*.json
+            predictive_maintenance/reports/*
+            run_output/**
+          retention-days: 14
+          if-no-files-found: error
+
+  publish-model:
+    needs: model-training
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Download trained model and configuration
+        uses: actions/download-artifact@v4
+        with:
+          name: model-results
+          path: .
+      - name: Commit model and updated evaluation reports to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add predictive_maintenance/models predictive_maintenance/reports
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update trained model and reports [skip ci]"
+            git push origin HEAD:main
+          fi
