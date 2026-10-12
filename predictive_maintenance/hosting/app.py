@@ -13,7 +13,7 @@ from features import RAW_FEATURES,add_features
 MODEL=ROOT/'predictive_maintenance'/'models'/'best_vehicle_engine_failure_prediction_model_v1.joblib'
 CONFIG=ROOT/'predictive_maintenance'/'models'/'config.json'
 st.set_page_config(page_title='Vehicle Engine Failure Prediction',page_icon='🔧')
-st.title('🔧 Vehicle Engine Failure Prediction')
+st.title('🔧 Vehicle Engine Failure Prediction - Capstone Project')
 st.caption('Capstone demonstration only. Not approved for real-world maintenance decisions.')
 if not MODEL.exists() or not CONFIG.exists():
     st.error('Model not available yet. Run the GitHub Actions pipeline successfully first.')
