@@ -68,6 +68,91 @@ def main():
                                   scoring='recall',n_jobs=2,random_state=42,verbose=1,
                                   error_score='raise')
         search.fit(Xtrain,ytrain)
+
+        # ====================================================
+        # COMPLETE RANDOMIZEDSEARCHCV EXPERIMENT TRACKING
+        # ====================================================
+
+        cv_results_df = pd.DataFrame(search.cv_results_)
+
+        cv_results_path = (
+            reports / "randomized_search_all_candidates.csv"
+        )
+
+        cv_results_df.to_csv(cv_results_path, index=False)
+
+        mlflow.log_artifact(
+            str(cv_results_path),
+            artifact_path="hyperparameter_tuning"
+        )
+
+        # Log each candidate as a nested MLflow run
+        for candidate_index, candidate in cv_results_df.iterrows():
+
+            with mlflow.start_run(
+                run_name=f"XGBoost_Candidate_{candidate_index + 1:03d}",
+                nested=True
+            ):
+
+                params = candidate["params"]
+
+                normalized_params = {}
+
+                for name, value in params.items():
+
+                    if isinstance(value, np.integer):
+                        value = int(value)
+                    elif isinstance(value, np.floating):
+                        value = float(value)
+
+                    normalized_params[name] = value
+
+                mlflow.log_params(normalized_params)
+
+                mlflow.log_param(
+                    "candidate_index",
+                    int(candidate_index + 1)
+                )
+
+                mlflow.log_metric(
+                    "mean_cv_recall",
+                    float(candidate["mean_test_score"])
+                )
+
+                mlflow.log_metric(
+                    "std_cv_recall",
+                    float(candidate["std_test_score"])
+                )
+
+                mlflow.log_metric(
+                    "cv_rank",
+                    float(candidate["rank_test_score"])
+                )
+
+                for fold in range(search.n_splits_):
+
+                    fold_column = f"split{fold}_test_score"
+
+                    if fold_column in cv_results_df.columns:
+                        mlflow.log_metric(
+                            f"fold_{fold + 1}_recall",
+                            float(candidate[fold_column])
+                        )
+
+        # Verify that all tuning candidates were saved
+        saved_results = pd.read_csv(cv_results_path)
+
+        assert len(saved_results) == len(
+            search.cv_results_["params"]
+        )
+
+        assert saved_results["mean_test_score"].notna().all()
+
+        print(
+            "All hyperparameter combinations logged:",
+            len(saved_results)
+        )
+
         model=search.best_estimator_
         mlflow.log_params({k:float(v) if isinstance(v,np.floating) else int(v) if isinstance(v,np.integer) else v
                            for k,v in search.best_params_.items()})
