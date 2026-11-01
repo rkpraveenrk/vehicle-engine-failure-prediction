@@ -1,5 +1,6 @@
 """Streamlit prediction UI loads the model committed by GitHub Actions."""
 import json
+import hashlib
 from pathlib import Path
 import joblib
 import pandas as pd
