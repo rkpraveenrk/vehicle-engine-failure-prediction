@@ -1,41 +1,76 @@
 name: Vehicle Engine Failure Prediction CI/CD
+
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - 'predictive_maintenance/model_building/**'
       - 'predictive_maintenance/hosting/**'
       - 'predictive_maintenance/data/engine_data.csv'
       - 'predictive_maintenance/requirements.txt'
       - '.github/workflows/pipeline.yml'
+
+# Prevent concurrent runs from pushing competing model updates.
+concurrency:
+  group: vehicle-engine-failure-pipeline-main
+  cancel-in-progress: false
+
 permissions:
   contents: read
+
 jobs:
+
+  # ==========================================================
+  # JOB 1 - DATASET REGISTRATION
+  # ==========================================================
+
   register-dataset:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: pip
           cache-dependency-path: predictive_maintenance/requirements.txt
-      - run: pip install -r predictive_maintenance/requirements.txt
-      - run: python predictive_maintenance/model_building/data_register.py
+
+      - name: Install dependencies
+        run: pip install -r predictive_maintenance/requirements.txt
+
+      - name: Register and validate dataset
+        run: python predictive_maintenance/model_building/data_register.py
+
+  # ==========================================================
+  # JOB 2 - DATA PREPARATION
+  # ==========================================================
 
   data-prep:
     needs: register-dataset
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: pip
           cache-dependency-path: predictive_maintenance/requirements.txt
-      - run: pip install -r predictive_maintenance/requirements.txt
-      - run: python predictive_maintenance/model_building/prep.py
+
+      - name: Install dependencies
+        run: pip install -r predictive_maintenance/requirements.txt
+
+      - name: Prepare training and testing datasets
+        run: python predictive_maintenance/model_building/prep.py
+
       - name: Upload train/test splits
         uses: actions/upload-artifact@v6
         with:
@@ -44,24 +79,38 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # ==========================================================
+  # JOB 3 - MODEL TRAINING AND EVALUATION
+  # ==========================================================
+
   model-training:
     needs: data-prep
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: pip
           cache-dependency-path: predictive_maintenance/requirements.txt
-      - run: pip install -r predictive_maintenance/requirements.txt
-      - name: Download processed data from previous job
+
+      - name: Install dependencies
+        run: pip install -r predictive_maintenance/requirements.txt
+
+      - name: Download processed data
         uses: actions/download-artifact@v7
         with:
           name: processed-datasets
           path: predictive_maintenance/data/processed
-      - name: Train tune and evaluate model
-        run: python predictive_maintenance/model_building/train.py --iterations 12
+
+      - name: Train, tune and evaluate model
+        run: |
+          python predictive_maintenance/model_building/train.py --iterations 12
+
       - name: Upload trained model and reports
         uses: actions/upload-artifact@v6
         with:
@@ -74,28 +123,81 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+  # ==========================================================
+  # JOB 4 - PUBLISH TRAINED MODEL
+  # ==========================================================
+
   publish-model:
     needs: model-training
     runs-on: ubuntu-latest
+
     permissions:
       contents: write
+
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout repository
+        uses: actions/checkout@v5
         with:
+          fetch-depth: 0
           persist-credentials: true
+
       - name: Download trained model and configuration
         uses: actions/download-artifact@v7
         with:
           name: model-results
           path: .
-      - name: Commit model and updated evaluation reports to main
+
+      - name: Configure Git identity
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit model and updated evaluation reports to main
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=========================================="
+          echo "PUBLISHING TRAINED MODEL AND REPORTS"
+          echo "=========================================="
+
+          # Stage only the generated model and report files.
           git add predictive_maintenance/models predictive_maintenance/reports
+
+          # If there are no changes, nothing needs publishing.
           if git diff --cached --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "Update trained model and reports [skip ci]"
-            git push origin HEAD:main
+            echo "No model or report changes to commit."
+            exit 0
           fi
+
+          # Commit generated artifacts locally.
+          git commit -m "Update trained model and reports [skip ci]"
+
+          # Fetch the latest remote branch.
+          git fetch origin main
+
+          # Rebase our generated-artifact commit on latest main.
+          # A conflict stops the job rather than overwriting code.
+          git rebase origin/main
+
+          # Push with a bounded retry for remote updates.
+          for attempt in 1 2 3; do
+
+            echo "Push attempt ${attempt}/3"
+
+            if git push origin HEAD:main; then
+              echo "SUCCESS - Model and reports published."
+              exit 0
+            fi
+
+            if [ "$attempt" -lt 3 ]; then
+              echo "Remote changed. Synchronizing and retrying."
+
+              git fetch origin main
+              git rebase origin/main
+            fi
+
+          done
+
+          echo "ERROR - Unable to publish after 3 attempts."
+          exit 1
