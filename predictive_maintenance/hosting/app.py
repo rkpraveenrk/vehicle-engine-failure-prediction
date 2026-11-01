@@ -24,6 +24,28 @@ def load_model():
     return joblib.load(MODEL),json.loads(CONFIG.read_text())
 
 model,config=load_model()
+# ============================================================
+# MODEL SHA-256 INTEGRITY VERIFICATION
+# ============================================================
+
+def calculate_model_sha256(model_path):
+    sha256 = hashlib.sha256()
+
+    with open(model_path, "rb") as file:
+        for chunk in iter(
+            lambda: file.read(1024 * 1024),
+            b""
+        ):
+            sha256.update(chunk)
+
+    return sha256.hexdigest()
+
+
+# Calculate hash of the exact model loaded by Streamlit
+deployed_model_hash = calculate_model_sha256(MODEL)
+
+# Display the model hash in the application
+st.caption(f"Deployed Model SHA-256: {deployed_model_hash}")
 st.write('Enter six sensor measurements. Values should be expressed in the same units as the training data.')
 with st.form('predict'):
     values={key:st.number_input(key,value=0.0,format='%.5f') for key in RAW_FEATURES}
